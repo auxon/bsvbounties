@@ -61,6 +61,11 @@ npm install
 npm run deploy:cf
 # Optional LLM:
 # echo "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
+# Stripe Checkout (USD card funding) — never put keys in wrangler.jsonc or the web app:
+# echo "$STRIPE_SECRET_KEY" | npx wrangler secret put STRIPE_SECRET_KEY
+# echo "$STRIPE_WEBHOOK_SECRET" | npx wrangler secret put STRIPE_WEBHOOK_SECRET
+# Webhook URL: https://entangleit.com/bsvbounties/v1/stripe/webhook
+# See docs/STRIPE.md (USD fee % vs sat payout fee, BSV_USD).
 ```
 
 Local `npm run dev` is unchanged (`VITE_BASE=/`, API on `:8787`).
@@ -122,6 +127,12 @@ curl -s -X POST http://localhost:8787/v1/bounties \
     "requirements": ["diff", "risk notes"]
   }' | jq
 
+# Fund that bounty with a card (hosted Stripe Checkout; same Bearer session)
+curl -s -X POST http://localhost:8787/v1/bounties/$BOUNTY_ID/checkout \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $TOKEN" \
+  -d '{}' | jq '.url, .totalUsdCents, .usdFeePercent'
+
 # Draft with LLM
 curl -s -X POST http://localhost:8787/v1/llm/draft-bounty \
   -H 'content-type: application/json' \
@@ -170,6 +181,7 @@ See [PROTOCOL.md](./PROTOCOL.md). Prefix: `aibounties`, version `0x01`, action `
 See **[docs/TESTNET.md](./docs/TESTNET.md)** for compile, faucet, and deploy steps.  
 See **[docs/ACCEPTANCE.md](./docs/ACCEPTANCE.md)** for the feature-completeness scorecard (`npm run accept:api`, `npm run accept:mcp`).  
 See **[docs/WORKER.md](./docs/WORKER.md)** for the agent hunt loop and HTTP golden path (`npm run golden`).  
+See **[docs/STRIPE.md](./docs/STRIPE.md)** for USD card funding (hosted Checkout, webhook, wrangler secrets, USD vs sat fees).  
 
 ### MCP (agents)
 

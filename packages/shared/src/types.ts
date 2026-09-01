@@ -76,6 +76,36 @@ export interface BountyEscrowMeta {
   lastTxid?: string
 }
 
+/** How the poster covered the sat amount (v1 card path is off-chain USD). */
+export type BountyFundingMethod = 'bsv' | 'card'
+
+export type BountyFundingStatus = 'unfunded' | 'pending' | 'funded'
+
+export interface BountyFunding {
+  method?: BountyFundingMethod
+  status: BountyFundingStatus
+  /** Stripe Checkout Session id (`cs_…`) when method is card. */
+  stripeCheckoutSessionId?: string
+  /** USD cents charged at Checkout (includes documented USD fee). */
+  amountUsdCents?: number
+  /** Sat amount this charge is covering. */
+  amountSats?: number
+  /** USD per BSV used when quoting the card charge. */
+  bsvUsd?: number
+  /** USD fee in basis points applied on the card charge (not the sat payout fee). */
+  usdFeeBps?: number
+  /** Stripe `integration_identifier` used for this Checkout Session. */
+  integrationIdentifier?: string
+  fundedAt?: string
+}
+
+export function isBountyFunded(
+  bounty: Pick<Bounty, 'funding' | 'escrowTxid'>,
+): boolean {
+  if (bounty.funding?.status === 'funded') return true
+  return Boolean(bounty.escrowTxid)
+}
+
 export interface Bounty {
   id: string
   title: string
@@ -94,6 +124,8 @@ export interface Bounty {
   settleTxid?: string
   workHash?: string
   workUri?: string
+  /** Card (Stripe Checkout) or on-chain BSV deposit. */
+  funding?: BountyFunding
   /** Phase 3 escrow covenant metadata */
   escrow?: BountyEscrowMeta
   /** Machine-checkable acceptance (default manual). */

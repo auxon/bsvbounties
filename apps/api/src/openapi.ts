@@ -15,7 +15,7 @@ export function buildOpenApi(publicUrl: string) {
           type: 'http',
           scheme: 'bearer',
           description:
-            'Session token from POST /v1/auth/login (after mint + challenge). Required to create bounties and attach escrowTxid.',
+            'Session token from POST /v1/auth/login (after mint + challenge). Required to create bounties, start card Checkout, and attach escrowTxid.',
         },
       },
     },
@@ -218,6 +218,62 @@ export function buildOpenApi(publicUrl: string) {
           },
         },
       },
+      '/v1/bounties/{id}/checkout': {
+        post: {
+          operationId: 'createBountyCheckout',
+          summary:
+            'Create a hosted Stripe Checkout Session (USD card) for a bounty. Auth: same as POST /v1/bounties (poster Bearer session).',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          responses: {
+            '200': { description: 'Checkout Session URL' },
+            '401': { description: 'Unauthorized — login required' },
+            '403': { description: 'Forbidden — not the poster' },
+            '409': { description: 'Already funded or invalid status' },
+            '503': { description: 'Stripe or BSV_USD not configured' },
+          },
+        },
+      },
+      '/v1/stripe/webhook': {
+        post: {
+          operationId: 'stripeWebhook',
+          summary:
+            'Stripe webhook. Verifies Stripe-Signature. checkout.session.completed marks the bounty funded (idempotent on session id).',
+          responses: {
+            '200': { description: 'Received' },
+            '400': { description: 'Missing or invalid signature' },
+          },
+        },
+      },
+      '/v1/funding/config': {
+        get: {
+          operationId: 'fundingConfig',
+          summary: 'USD card fee % and sat payout fee (no secrets)',
+          responses: { '200': { description: 'Fee config' } },
+        },
+      },
+      '/v1/funding/quote': {
+        get: {
+          operationId: 'fundingQuote',
+          summary: 'Quote a sat amount as a USD Checkout charge',
+          parameters: [
+            {
+              name: 'amountSats',
+              in: 'query',
+              required: true,
+              schema: { type: 'integer' },
+            },
+          ],
+          responses: { '200': { description: 'Quote' } },
+        },
+      },
       '/v1/bounties/{id}/claim': {
         post: {
           operationId: 'claimBounty',
@@ -345,6 +401,9 @@ export function buildAgentCard(publicUrl: string) {
       openapi: `${publicUrl}/openapi.json`,
       health: `${publicUrl}/health`,
       bounties: `${publicUrl}/v1/bounties`,
+      checkout: `${publicUrl}/v1/bounties/{id}/checkout`,
+      stripeWebhook: `${publicUrl}/v1/stripe/webhook`,
+      funding: `${publicUrl}/v1/funding/config`,
       escrow: `${publicUrl}/v1/bounties/{id}/escrow`,
       accounts: `${publicUrl}/v1/accounts`,
       marketplace: `${publicUrl}/v1/accounts/marketplace`,
@@ -360,6 +419,7 @@ export function buildAgentCard(publicUrl: string) {
       type: 'bearer',
       requiredFor: [
         'POST /v1/bounties',
+        'POST /v1/bounties/{id}/checkout',
         'PATCH /v1/bounties/{id}/escrow',
         'POST /v1/bounties/{id}/settle',
       ],
@@ -384,6 +444,10 @@ export function buildAgentCard(publicUrl: string) {
     payments: {
       asset: 'BSV',
       unit: 'satoshis',
+      cardFunding:
+        'Stripe Checkout (hosted, USD) on the platform Stripe account. No on-chain USD→BSV. Platform BSV float pays solvers. POST /v1/bounties/{id}/checkout (Bearer). Webhook POST /v1/stripe/webhook.',
+      usdFee:
+        'Documented USD_FEE_BPS (default 2.90%) + $0.30 on the card charge. Sat PLATFORM_FEE_BPS still applies on payout.',
       escrow: 'phase3-bounty-escrow-state-machine + auto-release verifier',
       accounts: 'numbered-1sat-index',
       bonds: 'poster-and-worker-bonds',

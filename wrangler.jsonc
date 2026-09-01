@@ -4,6 +4,7 @@
   "main": "apps/api/src/worker.ts",
   "compatibility_date": "2026-08-28",
   "compatibility_flags": ["nodejs_compat"],
+  // Stripe keys: `npx wrangler secret put STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` — never vars.
   "workers_dev": true,
   "preview_urls": true,
   "observability": {
@@ -19,7 +20,11 @@
     "REQUIRE_POSTER_BOND": "false",
     "REQUIRE_WORKER_BOND": "false",
     "LLM_PROVIDER": "xai",
-    "LLM_MODEL": "grok-3"
+    "LLM_MODEL": "grok-3",
+    // USD per 1 BSV for card Checkout quotes. Update when the market moves.
+    "BSV_USD": "25",
+    // 2.90% USD gross-up on card charges (plus $0.30). Sat payout fee is PLATFORM_FEE_BPS.
+    "USD_FEE_BPS": "290"
   },
   "kv_namespaces": [
     {

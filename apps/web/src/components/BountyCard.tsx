@@ -1,10 +1,18 @@
 import { useState } from 'react'
-import { formatVerificationReason, type Bounty } from '@ai-bounties/shared'
+import {
+  formatVerificationReason,
+  isBountyFunded,
+  type Bounty,
+} from '@ai-bounties/shared'
 
 function satsLabel(sats: number): string {
   if (sats >= 100_000_000) return `${(sats / 100_000_000).toFixed(4)} BSV`
   if (sats >= 1000) return `${(sats / 1000).toFixed(1)}k sats`
   return `${sats} sats`
+}
+
+function usdLabel(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`
 }
 
 const ESCROW_STATE: Record<number, string> = {
@@ -21,16 +29,31 @@ export function BountyCard({
   onSubmit,
   onApprove,
   onDispute,
+  onFundCard,
+  posterAccountNumber,
+  cardFundingEnabled,
 }: {
   bounty: Bounty
   onClaim?: (id: string) => void
   onSubmit?: (id: string, workUri: string) => void
   onApprove?: (id: string) => void
   onDispute?: (id: string) => void
+  onFundCard?: (id: string) => void
+  posterAccountNumber?: number
+  cardFundingEnabled?: boolean
 }) {
   const [workUri, setWorkUri] = useState(bounty.workUri ?? '')
   const acceptKind = bounty.acceptance?.kind ?? 'manual'
   const released = bounty.releasedSats ?? 0
+  const funded = isBountyFunded(bounty)
+  const isPoster =
+    posterAccountNumber != null && bounty.posterAccount === posterAccountNumber
+  const canFundCard =
+    Boolean(onFundCard) &&
+    Boolean(cardFundingEnabled) &&
+    isPoster &&
+    !funded &&
+    !['paid', 'refunded', 'cancelled'].includes(bounty.status)
   const workPlaceholder =
     acceptKind === 'http'
       ? 'JSON API URL — not Drive/PNG (use hash or llm-judge bounties for files)'
@@ -53,6 +76,22 @@ export function BountyCard({
           <span className="badge escrow" title="Phase 3 escrow">
             escrow {ESCROW_STATE[bounty.escrow.state] ?? bounty.escrow.state}
           </span>
+        )}
+        {funded ? (
+          <span
+            className="badge funded"
+            title={
+              bounty.funding?.method === 'card'
+                ? 'Funded with card (USD on platform Stripe; solvers paid from BSV float)'
+                : 'Funded on-chain (BSV escrow)'
+            }
+          >
+            {bounty.funding?.method === 'card' ? 'card funded' : 'funded'}
+          </span>
+        ) : bounty.funding?.status === 'pending' ? (
+          <span className="badge unfunded">card pending</span>
+        ) : (
+          <span className="badge unfunded">unfunded</span>
         )}
         <span className="amount">{satsLabel(bounty.amountSats)}</span>
       </div>
@@ -94,6 +133,11 @@ export function BountyCard({
             tx {bounty.escrowTxid.slice(0, 8)}…
           </span>
         )}
+        {bounty.funding?.method === 'card' && bounty.funding.amountUsdCents != null && (
+          <span className="txid">
+            card {usdLabel(bounty.funding.amountUsdCents)}
+          </span>
+        )}
       </div>
       {(bounty.status === 'claimed' || bounty.status === 'submitted') && onSubmit && (
         <label className="work-uri">
@@ -106,6 +150,15 @@ export function BountyCard({
         </label>
       )}
       <div className="card-actions">
+        {canFundCard && (
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={() => onFundCard?.(bounty.id)}
+          >
+            Fund with card
+          </button>
+        )}
         {bounty.status === 'open' && onClaim && (
           <button type="button" className="btn secondary" onClick={() => onClaim(bounty.id)}>
             Claim

@@ -31,6 +31,8 @@ Useful env (see `.env.example`):
 | `REQUIRE_POSTER_BOND` | Exercise bond gate |
 | `PLATFORM_ADMIN_SECRET` | Bond slash |
 | `AI_BOUNTIES_API_URL` | MCP → API |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Card funding (see [STRIPE.md](./STRIPE.md)) |
+| `BSV_USD` / `USD_FEE_BPS` | Sats→USD quote and documented USD fee % |
 
 ## How to run
 
@@ -65,6 +67,7 @@ Fill **Result** during a run. Seeded expectations reflect known interim limits.
 | Escrow UI edges | cancel / refund / resolve in web | Gap | Client has `escrowAction` but UI not wired |
 | sCrypt deploy template | compressed `02`/`03` pubkey + `ESCROW_MODE=scrypt` | Pass | Authenticated create (session controller key = compressed pubkey) |
 | Attach escrowTxid | `PATCH …/escrow` | Demo-only | Real txid blocked until faucet funds |
+| Stripe Checkout (USD) | `POST …/checkout` + webhook `checkout.session.completed` | Pass (unit) | Hosted Checkout; no on-chain USD→BSV. See [STRIPE.md](./STRIPE.md) |
 | Accounts mint / login / profile | challenge → demo sig → Bearer | Demo-only | `AUTH_MODE=demo` only |
 | Marketplace list / buy | list + buy (optional `commit:false`) | Demo-only | Index can transfer without broadcast |
 | Atomic swap template | `POST …/swap-template` outputs | Pass | 3 outputs; UI: Gap |

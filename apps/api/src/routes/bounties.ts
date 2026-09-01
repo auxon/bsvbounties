@@ -43,9 +43,21 @@ import type { BountyStore } from '../store/bountyStore.js'
 import type { AccountStore } from '../store/accountStore.js'
 import type { SessionStore } from '../store/sessionStore.js'
 import type { BondStore } from '../store/bondStore.js'
+import type { StripeEventStore } from '../store/stripeEventStore.js'
+import {
+  checkoutIntegrationIdentifier,
+  type StripeAdapter,
+} from '../stripe/client.js'
+import { bsvUsdFromEnv, quoteCardCharge, usdFeePercent } from '../stripe/quote.js'
 import { getSessionFromRequest } from './auth.js'
 import { bondGate, workerBondGate } from './bonds.js'
 import { runBountyVerifier, runLlmArbiter } from '../verifyFlow.js'
+
+export type BountyStripeContext = {
+  adapter: StripeAdapter | null
+  events: StripeEventStore
+  returnBase: string
+}
 
 const acceptanceSchema = z
   .object({
@@ -188,6 +200,7 @@ export function bountyRoutes(
   sessions?: SessionStore,
   bonds?: BondStore,
   llm?: LlmClient,
+  stripe?: BountyStripeContext,
 ) {
   const app = new Hono()
   const requireAccounts = process.env.REQUIRE_ACCOUNT_FOR_CLAIM === 'true'
@@ -490,8 +503,124 @@ export function bountyRoutes(
     const updated = await store.update(c.req.param('id'), {
       escrowTxid: body.escrowTxid,
       escrow,
+      funding: {
+        ...existing.funding,
+        method: 'bsv',
+        status: 'funded',
+        fundedAt: existing.funding?.fundedAt ?? new Date().toISOString(),
+      },
     })
     return c.json(updated)
+  })
+
+  /**
+   * Hosted Stripe Checkout (USD card) for a bounty the poster already created.
+   * Same auth as POST /v1/bounties. Marks funded only via webhook.
+   */
+  app.post('/:id/checkout', async (c) => {
+    const existing = store.get(c.req.param('id'))
+    if (!existing) return c.json({ error: 'not_found' }, 404)
+
+    const session = sessions
+      ? getSessionFromRequest(sessions, c.req.header('Authorization'))
+      : undefined
+    if (!session) {
+      return c.json(
+        {
+          error: 'unauthorized',
+          note: 'Login required to fund with a card. Send Authorization: Bearer <token> (same session as POST /v1/bounties).',
+        },
+        401,
+      )
+    }
+    const posterKey =
+      existing.posterPubKey || existing.escrow?.posterPubKey || ''
+    if (posterKey && session.controllerKey !== posterKey) {
+      return c.json(
+        {
+          error: 'forbidden',
+          note: 'Only the bounty poster session may start card checkout.',
+        },
+        403,
+      )
+    }
+
+    if (existing.funding?.status === 'funded' || existing.escrowTxid) {
+      return c.json(
+        {
+          error: 'already_funded',
+          note: 'This bounty is already funded (card webhook or BSV escrowTxid).',
+        },
+        409,
+      )
+    }
+    if (['paid', 'refunded', 'cancelled'].includes(existing.status)) {
+      return c.json(
+        { error: 'invalid_status', status: existing.status },
+        409,
+      )
+    }
+
+    if (!stripe?.adapter) {
+      return c.json(
+        {
+          error: 'stripe_not_configured',
+          note: 'Set STRIPE_SECRET_KEY (wrangler secret) to enable Fund with card.',
+        },
+        503,
+      )
+    }
+    const bsvUsd = bsvUsdFromEnv()
+    if (bsvUsd == null) {
+      return c.json(
+        {
+          error: 'bsv_usd_rate_missing',
+          note: 'Set BSV_USD (USD per BSV) to convert the sat amount into a USD Checkout charge.',
+        },
+        503,
+      )
+    }
+
+    const quote = quoteCardCharge({
+      amountSats: existing.amountSats,
+      bsvUsd,
+    })
+    const integrationIdentifier = checkoutIntegrationIdentifier()
+    const returnBase = stripe.returnBase.replace(/\/$/, '')
+    const created = await stripe.adapter.createCheckoutSession({
+      bounty: existing,
+      quote,
+      successUrl: `${returnBase}/?checkout=success&bounty=${encodeURIComponent(existing.id)}`,
+      cancelUrl: `${returnBase}/?checkout=cancel&bounty=${encodeURIComponent(existing.id)}`,
+      integrationIdentifier,
+    })
+
+    await store.update(existing.id, {
+      funding: {
+        method: 'card',
+        status: 'pending',
+        stripeCheckoutSessionId: created.id,
+        amountUsdCents: quote.totalUsdCents,
+        amountSats: existing.amountSats,
+        bsvUsd,
+        usdFeeBps: quote.usdFeeBps,
+        integrationIdentifier,
+      },
+    })
+
+    return c.json({
+      url: created.url,
+      sessionId: created.id,
+      bountyId: existing.id,
+      ...quote,
+      usdFeePercent: usdFeePercent(quote.usdFeeBps),
+      integrationIdentifier,
+      note:
+        'Redirect the poster to `url` (hosted Stripe Checkout). ' +
+        'Funding is confirmed by POST /v1/stripe/webhook on checkout.session.completed. ' +
+        `USD fee ${usdFeePercent(quote.usdFeeBps)} + $${(quote.fixedFeeCents / 100).toFixed(2)}; ` +
+        'sat payout fee is unchanged (PLATFORM_FEE_BPS).',
+    })
   })
 
   async function runEscrowMethod(

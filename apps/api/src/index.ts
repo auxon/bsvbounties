@@ -10,6 +10,7 @@ import { BountyStore } from './store/bountyStore.js'
 import { AccountStore } from './store/accountStore.js'
 import { BondStore } from './store/bondStore.js'
 import { ChallengeStore, SessionStore } from './store/sessionStore.js'
+import { StripeEventStore } from './store/stripeEventStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../../..')
@@ -29,11 +30,13 @@ const accountStore = new AccountStore(DATA_DIR)
 const sessionStore = new SessionStore(DATA_DIR)
 const challengeStore = new ChallengeStore()
 const bondStore = new BondStore(DATA_DIR)
+const stripeEventStore = new StripeEventStore(DATA_DIR)
 
 await bountyStore.init()
 await accountStore.init()
 await sessionStore.init()
 await bondStore.init()
+await stripeEventStore.init()
 
 const app = createApp({
   publicUrl: PUBLIC_URL,
@@ -46,6 +49,7 @@ const app = createApp({
     sessions: sessionStore,
     challenges: challengeStore,
     bonds: bondStore,
+    stripeEvents: stripeEventStore,
   },
 })
 

@@ -56,6 +56,33 @@ paths:
           description: Created
         '401':
           description: Unauthorized — login required
+  /v1/bounties/{id}/checkout:
+    post:
+      operationId: createBountyCheckout
+      summary: Hosted Stripe Checkout Session (USD card). Bearer poster session (same as POST /v1/bounties).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Checkout URL
+        '401':
+          description: Unauthorized — login required
+  /v1/stripe/webhook:
+    post:
+      operationId: stripeWebhook
+      summary: Stripe webhook. Verifies Stripe-Signature. checkout.session.completed marks funded (idempotent on session id).
+      responses:
+        '200':
+          description: Received
+        '400':
+          description: Missing or invalid signature
+  /v1/funding/config:
+    get:
+      operationId: fundingConfig
+      summary: USD card fee % and sat payout fee
+      responses:
+        '200':
+          description: Fee config
   /v1/llm/draft-bounty:
     post:
       operationId: draftBounty

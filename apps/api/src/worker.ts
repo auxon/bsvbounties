@@ -10,6 +10,7 @@ import { BondStore } from './store/bondStore.js'
 import { BountyStore } from './store/bountyStore.js'
 import { kvPersist } from './store/persist.js'
 import { ChallengeStore, SessionStore } from './store/sessionStore.js'
+import { StripeEventStore } from './store/stripeEventStore.js'
 
 const PREFIX = '/bsvbounties'
 
@@ -28,6 +29,10 @@ const ENV_KEYS = [
   'PLATFORM_FEE_BPS',
   'PLATFORM_FEE_PKH',
   'PLATFORM_ADMIN_SECRET',
+  'USD_FEE_BPS',
+  'BSV_USD',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
   'LLM_PROVIDER',
   'LLM_MODEL',
   'LLM_BASE_URL',
@@ -73,6 +78,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     sessions: new SessionStore(kvPersist(kv, 'sessions.json')),
     challenges: new ChallengeStore(kvPersist(kv, 'challenges.json')),
     bonds: new BondStore(kvPersist(kv, 'bonds.json')),
+    stripeEvents: new StripeEventStore(kvPersist(kv, 'stripe-events.json')),
   }
   await Promise.all([
     stores.bounties.init(),
@@ -80,6 +86,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     stores.sessions.init(),
     stores.challenges.init(),
     stores.bonds.init(),
+    stores.stripeEvents.init(),
   ])
   const publicUrl = env.PUBLIC_URL || `https://entangleit.com${PREFIX}`
   const app = createApp({

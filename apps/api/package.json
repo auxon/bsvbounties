@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "node --import tsx --test src/*.test.ts src/stripe/*.test.ts"
   },
   "dependencies": {
     "@ai-bounties/contracts": "*",
@@ -19,6 +19,7 @@
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.0",
     "hono": "^4.7.5",
+    "stripe": "^22.6.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

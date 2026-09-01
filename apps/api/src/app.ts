@@ -17,7 +17,11 @@ import { accountRoutes } from './routes/accounts.js'
 import { authRoutes } from './routes/auth.js'
 import { bondRoutes } from './routes/bonds.js'
 import { llmRoutes } from './routes/llm.js'
+import { fundingRoutes, stripeWebhookRoutes } from './routes/stripe.js'
 import { buildAgentCard, buildOpenApi } from './openapi.js'
+import { StripeEventStore } from './store/stripeEventStore.js'
+import { stripeAdapterFromEnv, type StripeAdapter } from './stripe/client.js'
+import { satFeeBpsFromEnv, usdFeeBpsFromEnv } from './stripe/quote.js'
 
 export type AppStores = {
   bounties: BountyStore
@@ -25,6 +29,7 @@ export type AppStores = {
   sessions: SessionStore
   challenges: ChallengeStore
   bonds: BondStore
+  stripeEvents?: StripeEventStore
 }
 
 export type CreateAppConfig = {
@@ -35,6 +40,8 @@ export type CreateAppConfig = {
   stores: AppStores
   /** Mount API under a prefix (e.g. `/bsvbounties` on Cloudflare). */
   basePath?: string
+  /** Injected in tests; default is env STRIPE_SECRET_KEY. Pass `null` to force off. */
+  stripe?: StripeAdapter | null
 }
 
 function scryptArtifactSafe(): boolean {
@@ -45,9 +52,20 @@ function scryptArtifactSafe(): boolean {
   }
 }
 
+function checkoutReturnBase(config: CreateAppConfig): string {
+  const pub = config.publicUrl.replace(/\/$/, '')
+  if (pub.includes('/bsvbounties')) return pub
+  const web = config.webOrigins.find(Boolean)
+  return (web || pub).replace(/\/$/, '')
+}
+
 export function createApp(config: CreateAppConfig): Hono {
   const inner = new Hono()
   const { bounties, accounts, sessions, challenges, bonds } = config.stores
+  const stripeEvents =
+    config.stores.stripeEvents ?? new StripeEventStore()
+  const stripeAdapter =
+    config.stripe === undefined ? stripeAdapterFromEnv() : config.stripe
   const origins = [...new Set(config.webOrigins.filter(Boolean))]
 
   inner.use('*', logger())
@@ -78,6 +96,9 @@ export function createApp(config: CreateAppConfig): Hono {
       requirePosterBond: process.env.REQUIRE_POSTER_BOND === 'true',
       requireWorkerBond: process.env.REQUIRE_WORKER_BOND === 'true',
       authMode: process.env.AUTH_MODE ?? 'both',
+      stripeConfigured: Boolean(stripeAdapter),
+      usdFeeBps: usdFeeBpsFromEnv(),
+      satFeeBps: satFeeBpsFromEnv(),
       mcp: `${config.publicUrl.replace(/\/$/, '')} → run apps/mcp (stdio)`,
     }),
   )
@@ -143,12 +164,22 @@ export function createApp(config: CreateAppConfig): Hono {
       sessions,
       bonds,
       config.llm,
+      {
+        adapter: stripeAdapter,
+        events: stripeEvents,
+        returnBase: checkoutReturnBase(config),
+      },
     ),
   )
   inner.route('/v1/accounts', accountRoutes(accounts, sessions, config.network))
   inner.route('/v1/auth', authRoutes(accounts, sessions, challenges))
   inner.route('/v1/bonds', bondRoutes(bonds, sessions, config.network))
   inner.route('/v1/llm', llmRoutes(bounties, accounts, config.llm))
+  inner.route('/v1/funding', fundingRoutes())
+  inner.route(
+    '/v1/stripe',
+    stripeWebhookRoutes(bounties, stripeEvents, stripeAdapter),
+  )
 
   inner.onError((err, c) => {
     console.error(err)

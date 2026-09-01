@@ -176,6 +176,54 @@ export function attachEscrow(id: string, escrowTxid: string) {
   })
 }
 
+export function createBountyCheckout(id: string) {
+  return request<{
+    url: string
+    sessionId: string
+    bountyId: string
+    amountSats: number
+    netUsdCents: number
+    feeUsdCents: number
+    totalUsdCents: number
+    bsvUsd: number
+    usdFeeBps: number
+    usdFeePercent: string
+    integrationIdentifier: string
+    note: string
+  }>(`/v1/bounties/${id}/checkout`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+export function getFundingConfig() {
+  return request<{
+    stripeConfigured: boolean
+    bsvUsd: number | null
+    usdFeeBps: number
+    usdFeePercent: string
+    satFeeBps: number
+    satFeePercent: string
+    stripeFixedFeeCents: number
+    currency: string
+    note: string
+  }>('/v1/funding/config')
+}
+
+export function quoteFunding(amountSats: number) {
+  return request<{
+    amountSats: number
+    bsvUsd: number
+    netUsdCents: number
+    feeUsdCents: number
+    totalUsdCents: number
+    usdFeeBps: number
+    usdFeePercent: string
+    satFeeBps: number
+    satFeePercent: string
+  }>(`/v1/funding/quote?amountSats=${encodeURIComponent(String(amountSats))}`)
+}
+
 // --- Accounts ---
 
 export function listAccounts(forSale?: boolean) {
